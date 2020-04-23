@@ -3,8 +3,7 @@ import sys
 import traceback
 
 import entrypoints
-
-from PyQt5 import QtGui, QtDesigner, QtCore, QtWidgets
+from PyQt5 import QtCore, QtDesigner, QtGui
 
 # from .utilities import stylesheet
 
@@ -80,7 +79,7 @@ class _DesignerHooks(QtCore.QObject):
         return manager.activeFormWindow()
 
     def _new_form_added(self, form_window_interface):
-        widget = form_window_interface.formContainer()
+        # widget = form_window_interface.formContainer()
         # style_data = stylesheet._get_style_data(None)
         # widget.setStyleSheet(style_data)
 
@@ -129,6 +128,11 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
         self.initialized = False
         self.manager = None
         self._icon = self._info['icon'] or QtGui.QIcon()
+
+    @property
+    def info(self):
+        """Information about the wrapped widget"""
+        return dict(self._info)
 
     def initialize(self, core):
         """
@@ -246,11 +250,6 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
     @classmethod
     def from_class(cls, widget_cls, designer_info=None):
         assert not isinstance(cls, QtDesigner.QPyDesignerCustomWidgetPlugin)
-        class Plugin(DesignerPluginWrapper):
-            __doc__ = f"Designer plugin for {widget_cls.__name__}"
-
-            def __init__(self):
-                super().__init__(widget_cls, is_container, group, extensions, icon)
 
         info = dict(
             cls=widget_cls,
@@ -316,7 +315,8 @@ def find_widgets():
                              ENTRYPOINT_WIDGET_KEY, entry.name)
             continue
 
-        if not isinstance(widget_cls, QtDesigner.QPyDesignerCustomWidgetPlugin):
+        if not isinstance(widget_cls,
+                          QtDesigner.QPyDesignerCustomWidgetPlugin):
             widget_cls = DesignerPluginWrapper.from_class(widget_cls)
 
         widgets[entry.name] = widget_cls
@@ -325,7 +325,7 @@ def find_widgets():
     for signal_name in designer_hooks.hookable_signals:
         entrypoint_key = f'{ENTRYPOINT_EVENT_KEY}.{signal_name}'
         signal = getattr(designer_hooks, signal_name)
-        for entry in entrypoints.get_group_all(key):
+        for entry in entrypoints.get_group_all(entrypoint_key):
             try:
                 target = entry.load()
                 signal.connect(target)
@@ -335,14 +335,3 @@ def find_widgets():
                 continue
 
     return widgets
-
-
-class TestWidget(QtWidgets.QWidget):
-    @classmethod
-    def get_designer_info(cls):
-        return dict(
-            is_container=False,
-            group='Group name',
-            extensions=None,
-            icon=None,
-        )
