@@ -89,7 +89,7 @@ script:
   - |
     if [[ $UNIT_TEST ]]; then
       echo "Running tests"
-      coverage run run_tests.py
+      coverage run -m pytest -vv
     fi
   - |
     if [[ $UNIT_TEST ]]; then
