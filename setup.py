@@ -53,6 +53,9 @@ setup(
         'console_scripts': [
             # 'some.module:some_function',
             ],
+        # 'qt_designer_widgets': [
+        #     'some.module:some_function',
+        #     ],
         },
     include_package_data=True,
     package_data={
