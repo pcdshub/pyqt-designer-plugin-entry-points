@@ -1,0 +1,2 @@
+[flake8]
+exclude = .git,__pycache__,build,dist,versioneer.py,pyqt_designer_plugin_entry_points/_version.py,docs/source/conf.py
