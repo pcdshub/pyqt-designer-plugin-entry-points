@@ -5,8 +5,6 @@ import traceback
 import entrypoints
 from PyQt5 import QtCore, QtDesigner, QtGui
 
-# from .utilities import stylesheet
-
 ENTRYPOINT_WIDGET_KEY = 'qt_designer_widgets'
 ENTRYPOINT_EVENT_KEY = 'qt_designer_event'
 
@@ -24,7 +22,7 @@ def get_designer_hooks():
 
 class _DesignerHooks(QtCore.QObject):
     """
-    Class that handles the integration with PyDM and the Qt Designer by hooking
+    Class that handles the integration with the Qt Designer by hooking
     up slots to signals provided by FormEditor and other classes.
     """
     __instance = None
@@ -112,8 +110,7 @@ Uncaught exception occurred while running Qt Designer:
 
 class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
     """
-    Parent class to standardize how pydm plugins are accessed in qt designer.
-    All functions have default returns that can be overriden as necessary.
+    Parent class to standardize how plugins are accessed in qt designer.
     """
 
     _info = None
@@ -196,8 +193,7 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
 
     def group(self):
         """
-        Return a common group name so all PyDM Widgets are together in
-        Qt Designer.
+        Group widgets by this name in the designer
         """
         return self._info['group']
 
