@@ -11,12 +11,12 @@ addons:
     packages:
       - herbstluftwm
 
-env: 
+env:
    global:
       - OFFICIAL_REPO="pcdshub/pyqt-designer-plugin-entry-points"
       - secure: ""
 
-matrix: 
+matrix:
   fast_finish: true
   include:
     - name: Style checking
@@ -95,10 +95,10 @@ script:
     if [[ $UNIT_TEST ]]; then
       coverage report -m
     fi
-  
+
   - |
     if [[ -n "$DOCTR_DEPLOY_ENCRYPTION_KEY_PCDSHUB_PYQT-DESIGNER-PLUGIN-ENTRY-POINTS" && $BUILD_DOCS ]]; then
-      # Create HTML documentation  
+      # Create HTML documentation
       set -e
       pushd docs
       make html
