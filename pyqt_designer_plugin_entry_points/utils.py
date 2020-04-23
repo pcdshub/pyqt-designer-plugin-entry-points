@@ -263,17 +263,19 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
         try:
             if designer_info is None:
                 designer_info = widget_cls.get_designer_info()
-        except Exception:
-            logger.debug('No designer info for widget for wrapping %s',
-                         widget_cls.__name__)
-            return None
+        except Exception as ex:
+            raise ValueError(
+                f'No designer info for widget for wrapping '
+                f'{widget_cls.__name__}'
+            ) from ex
 
         try:
             info.update(**designer_info)
         except Exception:
-            logger.debug('Invalid designer info for wrapping %s: %s',
-                         widget_cls.__name__, designer_info)
-            return None
+            raise ValueError(
+                f'Invalid designer info for widget for wrapping '
+                f'{widget_cls.__name__}: {designer_info}'
+            ) from None
 
         return type(f'{cls.__name__}_WrappedDesignerPlugin',
                     (DesignerPluginWrapper, ),
@@ -317,7 +319,12 @@ def find_widgets():
 
         if not isinstance(widget_cls,
                           QtDesigner.QPyDesignerCustomWidgetPlugin):
-            widget_cls = DesignerPluginWrapper.from_class(widget_cls)
+            try:
+                widget_cls = DesignerPluginWrapper.from_class(widget_cls)
+            except Exception as ex:
+                logger.warning('Failed to add class %s: %s',
+                               widget_cls, ex, exc_info=ex)
+                continue
 
         widgets[entry.name] = widget_cls
 

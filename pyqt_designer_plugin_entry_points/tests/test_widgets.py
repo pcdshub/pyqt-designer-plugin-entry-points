@@ -29,3 +29,14 @@ def test_widgets(monkeypatch):
     widgets = pyqt_designer_plugin_entry_points.find_widgets()
     assert set(widgets) == {'test_widget'}
     assert widgets['test_widget']._info['cls'] is TestWidget
+
+
+def test_smoke_no_designer_info(monkeypatch):
+    class TestWidget(QtWidgets.QWidget):
+        ...
+
+    conftest.patch_entrypoint(
+        monkeypatch, {WIDGET_KEY: dict(test_widget=TestWidget)}
+    )
+
+    assert set(pyqt_designer_plugin_entry_points.find_widgets()) == set()
