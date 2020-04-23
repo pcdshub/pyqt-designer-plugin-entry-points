@@ -3,12 +3,10 @@ import sys
 import traceback
 
 import entrypoints
-
-from PyQt5 import QtGui, QtDesigner, QtCore, QtWidgets
-
-# from .utilities import stylesheet
+from PyQt5 import QtCore, QtDesigner, QtGui
 
 ENTRYPOINT_WIDGET_KEY = 'qt_designer_widgets'
+ENTRYPOINT_EVENT_KEY = 'qt_designer_event'
 
 logger = logging.getLogger(__name__)
 
@@ -24,16 +22,26 @@ def get_designer_hooks():
 
 class _DesignerHooks(QtCore.QObject):
     """
-    Class that handles the integration with PyDM and the Qt Designer by hooking
+    Class that handles the integration with the Qt Designer by hooking
     up slots to signals provided by FormEditor and other classes.
     """
     __instance = None
+
+    formEditorSet = QtCore.pyqtSignal(QtCore.QObject)
     formWindowAdded = QtCore.pyqtSignal(QtCore.QObject)
+    uncaughtExceptionRaised = QtCore.pyqtSignal(dict)
+
+    def _get_hookable_signals(d):
+        return tuple(attr for attr, obj in d.items()
+                     if isinstance(obj, QtCore.pyqtSignal))
+
+    hookable_signals = _get_hookable_signals(locals())
 
     def __init__(self):
         super().__init__()
         self._form_editor = None
         self._update_timer = None
+        self._event_handlers = {}
 
     @property
     def form_editor(self):
@@ -41,14 +49,13 @@ class _DesignerHooks(QtCore.QObject):
 
     @form_editor.setter
     def form_editor(self, editor):
-        if self.form_editor is not None:
-            return
-
-        if not editor:
+        if self.form_editor is not None or not editor:
             return
 
         self._form_editor = editor
         self._setup_hooks()
+
+        self.formEditorSet.emit(editor)
 
     def _setup_hooks(self):
         sys.excepthook = self._handle_exceptions
@@ -56,9 +63,9 @@ class _DesignerHooks(QtCore.QObject):
         manager = self.form_window_manager
         if manager:
             manager.formWindowAdded.connect(self.formWindowAdded.emit)
-            manager.formWindowAdded.connect(
-                self._new_form_added
-            )
+
+        if not self._update_timer:
+            self._start_kicker()
 
     @property
     def form_window_manager(self):
@@ -75,21 +82,24 @@ class _DesignerHooks(QtCore.QObject):
 
         return manager.activeFormWindow()
 
-    def _new_form_added(self, form_window_interface):
-        style_data = stylesheet._get_style_data(None)
-        widget = form_window_interface.formContainer()
-        widget.setStyleSheet(style_data)
-        if not self._update_timer:
-            self._start_kicker()
-
     def _update_widgets(self):
         widget = self.active_form
         if widget:
             widget.update()
 
     def _handle_exceptions(self, exc_type, value, trace):
-        print("Exception occurred while running Qt Designer.")
-        print(''.join(traceback.format_exception(exc_type, value, trace)))
+        tb = ''.join(traceback.format_exception(exc_type, value, trace))
+        print(f"""
+
+Uncaught exception occurred while running Qt Designer:
+------------------------------------------------------
+{tb}
+------------------------------------------------------
+""", file=sys.stderr)
+        self.uncaughtExceptionRaised.emit(
+            dict(traceback=tb, exc_type=exc_type,
+                 value=value, trace=trace)
+        )
 
     def _start_kicker(self):
         self._update_timer = QtCore.QTimer()
@@ -100,8 +110,7 @@ class _DesignerHooks(QtCore.QObject):
 
 class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
     """
-    Parent class to standardize how pydm plugins are accessed in qt designer.
-    All functions have default returns that can be overriden as necessary.
+    Parent class to standardize how plugins are accessed in qt designer.
     """
 
     _info = None
@@ -119,11 +128,14 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
         self.manager = None
         self._icon = self._info['icon'] or QtGui.QIcon()
 
+    @classmethod
+    def info(cls):
+        """Information about the wrapped widget"""
+        return dict(cls._info)
+
     def initialize(self, core):
         """
-        Override this function if you need special initialization instructions.
-        Make sure you don't neglect to set the self.initialized flag to True
-        after a successful initialization.
+        Called to initialize the designer plugin
 
         Parameters
         ----------
@@ -133,7 +145,7 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
         if self.initialized:
             return
 
-        designer_hooks = _DesignerHooks()
+        designer_hooks = get_designer_hooks()
         designer_hooks.form_editor = core
 
         if self._info['extensions']:
@@ -181,8 +193,7 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
 
     def group(self):
         """
-        Return a common group name so all PyDM Widgets are together in
-        Qt Designer.
+        Group widgets by this name in the designer
         """
         return self._info['group']
 
@@ -235,11 +246,6 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
     @classmethod
     def from_class(cls, widget_cls, designer_info=None):
         assert not isinstance(cls, QtDesigner.QPyDesignerCustomWidgetPlugin)
-        class Plugin(DesignerPluginWrapper):
-            __doc__ = f"Designer plugin for {widget_cls.__name__}"
-
-            def __init__(self):
-                super().__init__(widget_cls, is_container, group, extensions, icon)
 
         info = dict(
             cls=widget_cls,
@@ -253,17 +259,19 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
         try:
             if designer_info is None:
                 designer_info = widget_cls.get_designer_info()
-        except Exception:
-            logger.debug('No designer info for widget for wrapping %s',
-                         widget_cls.__name__)
-            return None
+        except Exception as ex:
+            raise ValueError(
+                f'No designer info for widget for wrapping '
+                f'{widget_cls.__name__}'
+            ) from ex
 
         try:
             info.update(**designer_info)
         except Exception:
-            logger.debug('Invalid designer info for wrapping %s: %s',
-                         widget_cls.__name__, designer_info)
-            return None
+            raise ValueError(
+                f'Invalid designer info for widget for wrapping '
+                f'{widget_cls.__name__}: {designer_info}'
+            ) from None
 
         return type(f'{cls.__name__}_WrappedDesignerPlugin',
                     (DesignerPluginWrapper, ),
@@ -293,7 +301,7 @@ class ExtensionFactory(QtDesigner.QExtensionFactory):
         return None
 
 
-def find_widgets():
+def enumerate_widgets():
     widgets = {}
 
     for entry in entrypoints.get_group_all(ENTRYPOINT_WIDGET_KEY):
@@ -301,25 +309,75 @@ def find_widgets():
         try:
             widget_cls = entry.load()
         except Exception:
-            logger.exception("Failed to load happi.containers entry: %s",
-                             entry.name)
+            logger.exception("Failed to load %s entry: %s",
+                             ENTRYPOINT_WIDGET_KEY, entry.name)
             continue
 
-        if not isinstance(widget_cls, QtDesigner.QPyDesignerCustomWidgetPlugin):
-            widget_cls = DesignerPluginWrapper.from_class(widget_cls)
+        if not isinstance(widget_cls,
+                          QtDesigner.QPyDesignerCustomWidgetPlugin):
+            try:
+                widget_cls = DesignerPluginWrapper.from_class(widget_cls)
+            except Exception as ex:
+                logger.warning('Failed to add class %s: %s',
+                               widget_cls, ex, exc_info=ex)
+                continue
 
         widgets[entry.name] = widget_cls
 
-    widgets['test'] = DesignerPluginWrapper.from_class(TestWidget)
     return widgets
 
 
-class TestWidget(QtWidgets.QWidget):
-    @classmethod
-    def get_designer_info(cls):
-        return dict(
-            is_container=False,
-            group='Group name',
-            extensions=None,
-            icon=None,
-        )
+def enumerate_events_by_key(key):
+    for entry in entrypoints.get_group_all(key):
+        try:
+            target = entry.load()
+        except Exception:
+            logger.exception("Failed to load %s entry: %s",
+                             key, entry.name)
+            continue
+
+        yield entry, target
+
+
+def enumerate_events_by_signal_name(signal_name):
+    yield from enumerate_events_by_key(f'{ENTRYPOINT_EVENT_KEY}.{signal_name}')
+
+
+def enumerate_all_events():
+    designer_hooks = get_designer_hooks()
+    for signal_name in designer_hooks.hookable_signals:
+        for event in enumerate_events_by_signal_name(signal_name):
+            yield signal_name, event
+
+
+def connect_events():
+    designer_hooks = get_designer_hooks()
+    results = {'discovered': {},
+               'connected': {},
+               }
+
+    designer_hooks = get_designer_hooks()
+    for signal_name, (entry, target) in enumerate_all_events():
+        if signal_name not in results['discovered']:
+            results['discovered'][signal_name] = 0
+            results['connected'][signal_name] = 0
+
+        results['discovered'][signal_name] += 1
+        signal = getattr(designer_hooks, signal_name)
+        try:
+            signal.connect(target)
+        except Exception:
+            logger.exception("Failed to load %s entry: %s",
+                             signal_name, entry.name)
+            continue
+
+        results['connected'][signal_name] += 1
+        try:
+            if not hasattr(target, '_entrypoint_signal_connected'):
+                target._entrypoint_signal_connected = {}
+            target._entrypoint_signal_connected[signal_name] = True
+        except Exception:
+            ...
+            target._entrypoint_signal_connected = {}
+
+    return results
