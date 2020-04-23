@@ -1,0 +1,41 @@
+{% set name = "pyqt-designer-plugin-entry-points" %}
+{% set version = "0.0.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://github.com/pcdshub/pyqt-designer-plugin-entry-points/archive/v{{ version }}.tar.gz
+  sha256: 
+
+build:
+  noarch: python
+  number: 0
+  script: "{{ PYTHON }} -m pip install . -vv"
+
+requirements:
+  host:
+    - python >=3.6
+    - pip
+  run:
+    - python >=3.6
+    - pyqt >=5
+    - entrypoints
+
+test:
+  imports:
+    - pyqt_designer_plugin_entry_points
+
+about:
+  home: https://github.com/pcdshub/pyqt-designer-plugin-entry-points
+  doc_url: https://pcdshub.github.io/pyqt-designer-plugin-entry-points
+  dev_url: https://github.com/pcdshub/pyqt-designer-plugin-entry-points
+  license: SLAC Open
+  license_family: Other
+  license_file: LICENSE
+  summary: 'entrypoint-based widget registry for PyQt Designer plugins'
+
+extra:
+  recipe-maintainers:
+    - klauer
