@@ -9,6 +9,7 @@ from PyQt5 import QtGui, QtDesigner, QtCore, QtWidgets
 # from .utilities import stylesheet
 
 ENTRYPOINT_WIDGET_KEY = 'qt_designer_widgets'
+ENTRYPOINT_EVENT_KEY = 'qt_designer_event'
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +31,17 @@ class _DesignerHooks(QtCore.QObject):
     __instance = None
     formWindowAdded = QtCore.pyqtSignal(QtCore.QObject)
 
+    def _get_hookable_signals(d):
+        return tuple(attr for attr, obj in d.items()
+                     if isinstance(obj, QtCore.pyqtSignal))
+
+    hookable_signals = _get_hookable_signals(locals())
+
     def __init__(self):
         super().__init__()
         self._form_editor = None
         self._update_timer = None
+        self._event_handlers = {}
 
     @property
     def form_editor(self):
@@ -41,14 +49,12 @@ class _DesignerHooks(QtCore.QObject):
 
     @form_editor.setter
     def form_editor(self, editor):
-        if self.form_editor is not None:
-            return
-
-        if not editor:
+        if self.form_editor is not None or not editor:
             return
 
         self._form_editor = editor
         self._setup_hooks()
+        self.newEvent.emit('form-editor-set', dict(editor=editor))
 
     def _setup_hooks(self):
         sys.excepthook = self._handle_exceptions
@@ -56,9 +62,7 @@ class _DesignerHooks(QtCore.QObject):
         manager = self.form_window_manager
         if manager:
             manager.formWindowAdded.connect(self.formWindowAdded.emit)
-            manager.formWindowAdded.connect(
-                self._new_form_added
-            )
+            manager.formWindowAdded.connect(self._new_form_added)
 
     @property
     def form_window_manager(self):
@@ -76,9 +80,10 @@ class _DesignerHooks(QtCore.QObject):
         return manager.activeFormWindow()
 
     def _new_form_added(self, form_window_interface):
-        style_data = stylesheet._get_style_data(None)
         widget = form_window_interface.formContainer()
-        widget.setStyleSheet(style_data)
+        # style_data = stylesheet._get_style_data(None)
+        # widget.setStyleSheet(style_data)
+
         if not self._update_timer:
             self._start_kicker()
 
@@ -88,8 +93,14 @@ class _DesignerHooks(QtCore.QObject):
             widget.update()
 
     def _handle_exceptions(self, exc_type, value, trace):
-        print("Exception occurred while running Qt Designer.")
-        print(''.join(traceback.format_exception(exc_type, value, trace)))
+        tb = ''.join(traceback.format_exception(exc_type, value, trace))
+        print(f"""
+
+Uncaught exception occurred while running Qt Designer:
+------------------------------------------------------
+{tb}
+------------------------------------------------------
+""", file=sys.stderr)
 
     def _start_kicker(self):
         self._update_timer = QtCore.QTimer()
@@ -133,7 +144,7 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
         if self.initialized:
             return
 
-        designer_hooks = _DesignerHooks()
+        designer_hooks = get_designer_hooks()
         designer_hooks.form_editor = core
 
         if self._info['extensions']:
@@ -301,8 +312,8 @@ def find_widgets():
         try:
             widget_cls = entry.load()
         except Exception:
-            logger.exception("Failed to load happi.containers entry: %s",
-                             entry.name)
+            logger.exception("Failed to load %s entry: %s",
+                             ENTRYPOINT_WIDGET_KEY, entry.name)
             continue
 
         if not isinstance(widget_cls, QtDesigner.QPyDesignerCustomWidgetPlugin):
@@ -310,7 +321,19 @@ def find_widgets():
 
         widgets[entry.name] = widget_cls
 
-    widgets['test'] = DesignerPluginWrapper.from_class(TestWidget)
+    designer_hooks = get_designer_hooks()
+    for signal_name in designer_hooks.hookable_signals:
+        entrypoint_key = f'{ENTRYPOINT_EVENT_KEY}.{signal_name}'
+        signal = getattr(designer_hooks, signal_name)
+        for entry in entrypoints.get_group_all(key):
+            try:
+                target = entry.load()
+                signal.connect(target)
+            except Exception:
+                logger.exception("Failed to load %s entry: %s",
+                                 entrypoint_key, entry.name)
+                continue
+
     return widgets
 
 
