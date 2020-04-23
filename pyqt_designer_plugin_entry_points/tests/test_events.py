@@ -21,8 +21,6 @@ def test_events(monkeypatch):
 
     results = pyqt_designer_plugin_entry_points.connect_events()
     print(results)
-    assert results == {
-        'discovered': {key: 1},
-        'connected': {key: 1}
-    }
+    assert results['discovered'][key] == 1
+    assert results['connected'][key] == 1
     assert callable._entrypoint_signal_connected[key]

@@ -28,7 +28,10 @@ class _DesignerHooks(QtCore.QObject):
     up slots to signals provided by FormEditor and other classes.
     """
     __instance = None
+
+    formEditorSet = QtCore.pyqtSignal(QtCore.QObject)
     formWindowAdded = QtCore.pyqtSignal(QtCore.QObject)
+    uncaughtExceptionRaised = QtCore.pyqtSignal(dict)
 
     def _get_hookable_signals(d):
         return tuple(attr for attr, obj in d.items()
@@ -53,7 +56,8 @@ class _DesignerHooks(QtCore.QObject):
 
         self._form_editor = editor
         self._setup_hooks()
-        self.newEvent.emit('form-editor-set', dict(editor=editor))
+
+        self.formEditorSet.emit(editor)
 
     def _setup_hooks(self):
         sys.excepthook = self._handle_exceptions
@@ -61,7 +65,9 @@ class _DesignerHooks(QtCore.QObject):
         manager = self.form_window_manager
         if manager:
             manager.formWindowAdded.connect(self.formWindowAdded.emit)
-            manager.formWindowAdded.connect(self._new_form_added)
+
+        if not self._update_timer:
+            self._start_kicker()
 
     @property
     def form_window_manager(self):
@@ -78,14 +84,6 @@ class _DesignerHooks(QtCore.QObject):
 
         return manager.activeFormWindow()
 
-    def _new_form_added(self, form_window_interface):
-        # widget = form_window_interface.formContainer()
-        # style_data = stylesheet._get_style_data(None)
-        # widget.setStyleSheet(style_data)
-
-        if not self._update_timer:
-            self._start_kicker()
-
     def _update_widgets(self):
         widget = self.active_form
         if widget:
@@ -100,6 +98,10 @@ Uncaught exception occurred while running Qt Designer:
 {tb}
 ------------------------------------------------------
 """, file=sys.stderr)
+        self.uncaughtExceptionRaised.emit(
+            dict(traceback=tb, exc_type=exc_type,
+                 value=value, trace=trace)
+        )
 
     def _start_kicker(self):
         self._update_timer = QtCore.QTimer()
@@ -136,9 +138,7 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
 
     def initialize(self, core):
         """
-        Override this function if you need special initialization instructions.
-        Make sure you don't neglect to set the self.initialized flag to True
-        after a successful initialization.
+        Called to initialize the designer plugin
 
         Parameters
         ----------
