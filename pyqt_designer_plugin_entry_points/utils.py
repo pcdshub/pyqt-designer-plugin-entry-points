@@ -328,11 +328,21 @@ def find_widgets():
 
         widgets[entry.name] = widget_cls
 
+    return widgets
+
+
+def connect_events():
     designer_hooks = get_designer_hooks()
+    results = {'discovered': {},
+               'connected': {},
+               }
     for signal_name in designer_hooks.hookable_signals:
         entrypoint_key = f'{ENTRYPOINT_EVENT_KEY}.{signal_name}'
         signal = getattr(designer_hooks, signal_name)
+        results['discovered'][entrypoint_key] = 0
+        results['connected'][entrypoint_key] = 0
         for entry in entrypoints.get_group_all(entrypoint_key):
+            results['discovered'][entrypoint_key] += 1
             try:
                 target = entry.load()
                 signal.connect(target)
@@ -341,4 +351,13 @@ def find_widgets():
                                  entrypoint_key, entry.name)
                 continue
 
-    return widgets
+            results['connected'][entrypoint_key] += 1
+            try:
+                if not hasattr(target, '_entrypoint_signal_connected'):
+                    target._entrypoint_signal_connected = {}
+                target._entrypoint_signal_connected[entrypoint_key] = True
+            except Exception:
+                ...
+                target._entrypoint_signal_connected = {}
+
+    return results
