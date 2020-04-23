@@ -40,3 +40,16 @@ def test_smoke_no_designer_info(monkeypatch):
     )
 
     assert set(pyqt_designer_plugin_entry_points.find_widgets()) == set()
+
+
+def test_invalid_designer_info(monkeypatch):
+    class TestWidget(QtWidgets.QWidget):
+        @classmethod
+        def get_designer_info(cls):
+            return None
+
+    conftest.patch_entrypoint(
+        monkeypatch, {WIDGET_KEY: dict(test_widget=TestWidget)}
+    )
+
+    assert set(pyqt_designer_plugin_entry_points.find_widgets()) == set()
