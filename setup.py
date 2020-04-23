@@ -33,14 +33,6 @@ with open(path.join(here, 'requirements.txt')) as requirements_file:
                     if not line.startswith('#')]
 
 
-git_requirements = [r for r in requirements if r.startswith('git+')]
-if git_requirements:
-    print('User must install the following packages manually:')
-    print()
-    print("\n".join(f'* {r}' for r in git_requirements))
-    print()
-
-
 setup(
     name='pyqt-designer-plugin-entry-points',
     version=versioneer.get_version(),
@@ -51,22 +43,9 @@ setup(
     description='Entry points',
     long_description=readme,
     url='https://github.com/pcdshub/pyqt-designer-plugin-entry-points',
-    entry_points={
-        'console_scripts': [
-            # 'some.module:some_function',
-            ],
-        # 'qt_designer_widgets': [
-        #     'some.module:some_function',
-        #     ],
-        },
+    entry_points={},
     include_package_data=True,
-    package_data={
-        'pyqt_designer_plugin_entry_points': [
-            # When adding files here, remember to update MANIFEST.in as well,
-            # or else they will not be included in the distribution on PyPI!
-            # 'path/to/data_file',
-            ]
-        },
+    package_data={'pyqt_designer_plugin_entry_points': []},
     install_requires=requirements,
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
