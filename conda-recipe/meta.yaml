@@ -1,18 +1,16 @@
-{% set name = "pyqt-designer-plugin-entry-points" %}
-{% set version = "0.0.0" %}
+{% set data = load_setup_py_data() %}
 
 package:
-  name: {{ name|lower }}
-  version: {{ version }}
+  name: pyqt-designer-plugin-entry-points
+  version: {{ data.get('version') }}
 
 source:
-  url: https://github.com/pcdshub/pyqt-designer-plugin-entry-points/archive/v{{ version }}.tar.gz
-  sha256:
+  path: ..
 
 build:
   noarch: python
   number: 0
-  script: "{{ PYTHON }} -m pip install . -vv"
+  script: python -m pip install . -vv
 
 requirements:
   host:
