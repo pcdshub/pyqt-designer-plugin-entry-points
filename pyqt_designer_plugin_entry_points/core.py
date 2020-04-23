@@ -131,10 +131,10 @@ class DesignerPluginWrapper(QtDesigner.QPyDesignerCustomWidgetPlugin):
         self.manager = None
         self._icon = self._info['icon'] or QtGui.QIcon()
 
-    @property
-    def info(self):
+    @classmethod
+    def info(cls):
         """Information about the wrapped widget"""
-        return dict(self._info)
+        return dict(cls._info)
 
     def initialize(self, core):
         """
@@ -305,7 +305,7 @@ class ExtensionFactory(QtDesigner.QExtensionFactory):
         return None
 
 
-def find_widgets():
+def enumerate_widgets():
     widgets = {}
 
     for entry in entrypoints.get_group_all(ENTRYPOINT_WIDGET_KEY):
@@ -331,33 +331,57 @@ def find_widgets():
     return widgets
 
 
+def enumerate_events_by_key(key):
+    for entry in entrypoints.get_group_all(key):
+        try:
+            target = entry.load()
+        except Exception:
+            logger.exception("Failed to load %s entry: %s",
+                             key, entry.name)
+            continue
+
+        yield entry, target
+
+
+def enumerate_events_by_signal_name(signal_name):
+    yield from enumerate_events_by_key(f'{ENTRYPOINT_EVENT_KEY}.{signal_name}')
+
+
+def enumerate_all_events():
+    designer_hooks = get_designer_hooks()
+    for signal_name in designer_hooks.hookable_signals:
+        for event in enumerate_events_by_signal_name(signal_name):
+            yield signal_name, event
+
+
 def connect_events():
     designer_hooks = get_designer_hooks()
     results = {'discovered': {},
                'connected': {},
                }
-    for signal_name in designer_hooks.hookable_signals:
-        entrypoint_key = f'{ENTRYPOINT_EVENT_KEY}.{signal_name}'
-        signal = getattr(designer_hooks, signal_name)
-        results['discovered'][entrypoint_key] = 0
-        results['connected'][entrypoint_key] = 0
-        for entry in entrypoints.get_group_all(entrypoint_key):
-            results['discovered'][entrypoint_key] += 1
-            try:
-                target = entry.load()
-                signal.connect(target)
-            except Exception:
-                logger.exception("Failed to load %s entry: %s",
-                                 entrypoint_key, entry.name)
-                continue
 
-            results['connected'][entrypoint_key] += 1
-            try:
-                if not hasattr(target, '_entrypoint_signal_connected'):
-                    target._entrypoint_signal_connected = {}
-                target._entrypoint_signal_connected[entrypoint_key] = True
-            except Exception:
-                ...
+    designer_hooks = get_designer_hooks()
+    for signal_name, (entry, target) in enumerate_all_events():
+        if signal_name not in results['discovered']:
+            results['discovered'][signal_name] = 0
+            results['connected'][signal_name] = 0
+
+        results['discovered'][signal_name] += 1
+        signal = getattr(designer_hooks, signal_name)
+        try:
+            signal.connect(target)
+        except Exception:
+            logger.exception("Failed to load %s entry: %s",
+                             signal_name, entry.name)
+            continue
+
+        results['connected'][signal_name] += 1
+        try:
+            if not hasattr(target, '_entrypoint_signal_connected'):
                 target._entrypoint_signal_connected = {}
+            target._entrypoint_signal_connected[signal_name] = True
+        except Exception:
+            ...
+            target._entrypoint_signal_connected = {}
 
     return results

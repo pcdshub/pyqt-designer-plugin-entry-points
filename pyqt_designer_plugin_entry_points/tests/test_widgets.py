@@ -8,7 +8,7 @@ from . import conftest
 
 logger = logging.getLogger(__name__)
 
-WIDGET_KEY = pyqt_designer_plugin_entry_points.utils.ENTRYPOINT_WIDGET_KEY
+WIDGET_KEY = pyqt_designer_plugin_entry_points.core.ENTRYPOINT_WIDGET_KEY
 
 
 def test_widgets(monkeypatch):
@@ -26,7 +26,7 @@ def test_widgets(monkeypatch):
         monkeypatch, {WIDGET_KEY: dict(test_widget=TestWidget)}
     )
 
-    widgets = pyqt_designer_plugin_entry_points.find_widgets()
+    widgets = pyqt_designer_plugin_entry_points.enumerate_widgets()
     assert set(widgets) == {'test_widget'}
     assert widgets['test_widget']._info['cls'] is TestWidget
 
@@ -39,7 +39,7 @@ def test_smoke_no_designer_info(monkeypatch):
         monkeypatch, {WIDGET_KEY: dict(test_widget=TestWidget)}
     )
 
-    assert set(pyqt_designer_plugin_entry_points.find_widgets()) == set()
+    assert set(pyqt_designer_plugin_entry_points.enumerate_widgets()) == set()
 
 
 def test_invalid_designer_info(monkeypatch):
@@ -52,4 +52,4 @@ def test_invalid_designer_info(monkeypatch):
         monkeypatch, {WIDGET_KEY: dict(test_widget=TestWidget)}
     )
 
-    assert set(pyqt_designer_plugin_entry_points.find_widgets()) == set()
+    assert set(pyqt_designer_plugin_entry_points.enumerate_widgets()) == set()
